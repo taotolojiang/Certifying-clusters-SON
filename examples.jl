@@ -1,6 +1,6 @@
 include("einsum3.jl")
 include("./data_generation.jl")
-include("./cluster_test_simods.jl")
+include("./cluster_test.jl")
 # include("../../GitHub/Einsum.jl/src/einsum2.jl")
 import .ClusterTests
 import .DataGeneration
