@@ -1,7 +1,7 @@
 module DataGeneration
 include("./einsum3.jl")
 import ..Einsum.@einsumnum
-include("./cluster_test_simods.jl")
+include("./cluster_test.jl")
 import .ClusterTests
 using LinearAlgebra
 using Random
