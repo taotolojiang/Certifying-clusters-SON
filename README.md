@@ -6,7 +6,7 @@ This repository contains the numerical implementation for the clustering test in
 ### Dependencies
 The code has been tested in `Julia 1.3` and depends on the packages `Distributions`, `LinearAlgebra`, `Random`, `Distributions`, `LightGraphs`.
 
-### Short Tour
+### Quick Tour
 - `cluster_test.jl` implements ADMM in \[2\] to solve SON with both uniform and multiplicative weights, apply the clustering test in \[1\] to certify cluster assignments and evaluate the performance of the clustering.
 - `data_generation.jl` generates half-moon and a mixture of Gaussians datasets and call `cluster_test.jl` to find certified clusters for these datasets.
 - `examples.jl` is a sample script that one should follow in order to use the library.
