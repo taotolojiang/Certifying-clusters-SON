@@ -1,6 +1,6 @@
 include("einsum3.jl")
 include("./data_generation.jl")
-include("./cluster_test.jl")
+include("./model.jl")
 # include("../../GitHub/Einsum.jl/src/einsum2.jl")
 import .ClusterTests
 import .DataGeneration
@@ -24,7 +24,7 @@ import .DataGeneration
 """
 Apply sum-of-norms clustering to a mixture of Gaussians
 """
-n = 500    # number of points
+n = 50    # number of points
 d = 2     # dimension
 k = 2    # number of Gaussians
 # sigma = 1.0    # standard deviation is sigma * sqrt(2)

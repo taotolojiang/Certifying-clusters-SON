@@ -1,7 +1,7 @@
 module DataGeneration
 include("./einsum3.jl")
 import ..Einsum.@einsumnum
-include("./cluster_test.jl")
+include("./cluster_test_simods.jl")
 import .ClusterTests
 using LinearAlgebra
 using Random
@@ -120,6 +120,144 @@ function twohalfmoons(N, noise, std, amt)
     return a, compID, weight
 end
 
+function compute_randind(compID, C_admm)
+    n = length(compID)
+
+    inda = 0.0
+    indb = 0.0
+    indc = 0.0
+    indd = 0.0
+
+    inconclusive = findall(isequal(0), C_admm)
+    num_inconclusive = length(inconclusive)
+    wrongpair_inconclusive = num_inconclusive * (n - num_inconclusive) + num_inconclusive * (num_inconclusive-1) / 2
+
+    conclusive = setdiff(1:n, inconclusive)
+    num_conclusive = n - num_inconclusive
+
+    j = 0
+    k = 0
+    for p = 1:num_conclusive
+        for q = (j+1):num_conclusive
+            j = conclusive[p]
+            k = conclusive[q]
+            Sj = compID[j]
+            Sk = compID[k]
+            Xj = C_admm[j]
+            Xk = C_admm[k]
+
+
+            if Sj == Sk
+                if Xj == Xk
+                    inda = inda + 1.0
+                else
+                    indc = indc + 1.0
+                end
+            else
+                if Xj == Xk
+                    indd = indd + 1.0
+                else
+                    indb = indb + 1.0
+                end
+            end
+        end
+    end
+    Randind = (inda + indb)/(inda + indb + indc + indd + wrongpair_inconclusive);
+    return Randind, inda, indb, indc, indd
+end
+
+function compute_weighted_randind(compID, C_admm, weight)
+    n = length(compID)
+
+    inda = 0.0
+    indb = 0.0
+    indc = 0.0
+    indd = 0.0
+
+    inconclusive = findall(isequal(0), C_admm)
+    num_inconclusive = length(inconclusive)
+    wrongpair_inconclusive = num_inconclusive * (n - num_inconclusive) + num_inconclusive * (num_inconclusive-1) / 2
+
+    conclusive = setdiff(1:n, inconclusive)
+    num_conclusive = n - num_inconclusive
+
+    j = 0
+    k = 0
+
+    total_weight = 0.0
+    for p = 1:n
+        for q = (p+1):n
+            total_weight = total_weight + weight[p] * weight[q]
+        end
+    end
+
+    for p = 1:num_conclusive
+        for q = (j+1):num_conclusive
+            j = conclusive[p]
+            k = conclusive[q]
+            Sj = compID[j]
+            Sk = compID[k]
+            Xj = C_admm[j]
+            Xk = C_admm[k]
+            weightjk = weight[j] * weight[k]
+            
+
+            if Sj == Sk
+                if Xj == Xk
+                    inda = inda + weightjk
+                else
+                    indc = indc + weightjk
+                end
+            else
+                if Xj == Xk
+                    indd = indd + weightjk
+                else
+                    indb = indb + weightjk
+                end
+            end
+        end
+    end
+    weighted_Randind = (inda + indb)/total_weight
+    return weighted_Randind, inda, indb, indc, indd
+end
+
+function count_correctly_clustered_general(k, C_admm, compID)
+
+    # For m=1:k, select the cluster among
+    # from C_admm that has the
+    # largest number of nodes from V_m
+    # This is called mapclust (mapping from numbering
+    # in C_theta to number in C_admm).
+    mapclust = zeros(Int,k)
+    n = length(compID)
+    conclusive_index = findall(C_admm .!= 0)
+    num_conclusive = length(conclusive_index)
+    # println(num_conclusive)
+    num_inconclusive = n - num_conclusive
+    compID = compID[conclusive_index]
+    C_admm = C_admm[conclusive_index]
+    for m = 1 : k
+        V_m = findall(compID .== m)
+        u = zeros(Int, n)
+        for i = 1 : length(V_m)
+            ci = C_admm[V_m[i]]
+            u[ci] = u[ci] + 1
+        end
+        scrap, maxoverlapm2 = findmax(u)
+        mapclust[m] = maxoverlapm2
+    end
+
+    # Now score the clustering as follow:
+    # Compute numvm_clust, numvm_total,
+    # numall_clust, num_distinct_clust
+
+    num_clust = 0
+    for i = 1 : num_conclusive
+        num_clust += (C_admm[i] == mapclust[compID[i]]) ? 1 : 0
+    end
+    num_distinct_clust = length(unique(mapclust))
+    return num_clust, num_distinct_clust, num_inconclusive
+end
 
 """
 n = 80    # number of points
@@ -140,7 +278,7 @@ function run_test_lambda_rho_meandistance(n, d, k, theta, lambdamulseq, meandist
         for meandist in meandistvec
             ee = Matrix{Float64}(meandist * I,d,d)    
             mu = ee[1:k, :]
-            println(meandist)
+            # println(meandist)
             a, compID, Vm, C_theta, weight = gm_generator(mu,
                                                   sigma * ones(k),
                                                   ones(k) / k,
@@ -155,9 +293,9 @@ function run_test_lambda_rho_meandistance(n, d, k, theta, lambdamulseq, meandist
             theta_ineq = 0.7 * 0.5 * meandist
             chicum = cdf(Chi(d), theta_ineq)
             lambdamin = 2 * theta_ineq * sigma * k / (chicum * n * average_weight * 100) # the extra term 5 in the denominator is to ensure lambdamin < lambdamax
-            println(lambdamin)
+            # println(lambdamin)
             lambdamax = meandist * sqrt(2) / (2 * (n - 1) * average_weight * 0.1) # the extra term 0.2 in the denominator is to ensure lambdamin < lambdamax
-            println(lambdamax)
+            # println(lambdamax)
             println(oh, "------")
             println(oh, "lambdamin = ", lambdamin, " lambda_max = ", lambdamax)
             @assert lambdamin<lambdamax
@@ -172,9 +310,9 @@ function run_test_lambda_rho_meandistance(n, d, k, theta, lambdamulseq, meandist
                 end
                 X_s, Y_s, Z_s, s_s, u_s, t_s, Alpha_s, Beta_s, gamma_s, Optimality_cond, gap, clusterID, itcount, 
                     clustering_cond, min_strict_comp = ClusterTests.admm_Chi_Lange_wtest(a, lambda, weight, maxit)
-                num_clust, num_distinct_clust, num_inconclusive = ClusterTests.count_correctly_clustered_general(k, clusterID, compID) 
-                Randind, inda, indb, indc, indd = ClusterTests.compute_randind(compID, clusterID)
-                Randind_s, inda_s, indb_s, indc_s, indd_s = ClusterTests.compute_randind(compID[Vm], clusterID[Vm])
+                num_clust, num_distinct_clust, num_inconclusive = count_correctly_clustered_general(k, clusterID, compID) 
+                Randind, inda, indb, indc, indd = compute_randind(compID, clusterID)
+                Randind_s, inda_s, indb_s, indc_s, indd_s = compute_randind(compID[Vm], clusterID[Vm])
                 push!(Randind_vec, Randind)
                 push!(Randind_vec_s, Randind_s)
                 num_point_s = length(Vm)
@@ -259,9 +397,9 @@ function run_test_lambda_halfmoon(n, std, noise, Gaussian, lambdamulseq, amtvec,
                 lambda = lambdavec[j]
                 X_s, Y_s, Z_s, s_s, u_s, t_s, Alpha_s, Beta_s, gamma_s, Optimality_cond, gap, clusterID, itcount, 
                             clustering_cond, min_strict_comp = ClusterTests.admm_Chi_Lange_wtest(a, lambda, weight, maxit)
-                num_clust, num_distinct_clust, num_inconclusive = ClusterTests.count_correctly_clustered_general(k, clusterID, compID) 
-                Randind, inda, indb, indc, indd = ClusterTests.compute_randind(compID, clusterID)
-                weighted_Randind, weighted_inda, weighted_indb, weighted_indc, weighted_indd = ClusterTests.compute_weighted_randind(compID, clusterID, weight)
+                num_clust, num_distinct_clust, num_inconclusive = count_correctly_clustered_general(k, clusterID, compID) 
+                Randind, inda, indb, indc, indd = compute_randind(compID, clusterID)
+                weighted_Randind, weighted_inda, weighted_indb, weighted_indc, weighted_indd = compute_weighted_randind(compID, clusterID, weight)
 
 
                 println(oh, "lambda = ", lambda, " duality gap = ", gap)
